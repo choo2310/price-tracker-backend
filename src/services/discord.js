@@ -88,7 +88,7 @@ class DiscordService {
 
     // Create title and description based on direction
     let directionEmoji, title, description;
-    
+
     switch (direction) {
       case "above":
         directionEmoji = "⬆️";
@@ -103,7 +103,8 @@ class DiscordService {
       case "either":
         directionEmoji = "🔄";
         title = `${directionEmoji} Price Alert: ${symbol}`;
-        const crossedDirection = currentPrice >= targetPrice ? "above" : "below";
+        const crossedDirection =
+          currentPrice >= targetPrice ? "above" : "below";
         description = `**${symbol}** has crossed your target price (now ${crossedDirection} target)!`;
         break;
       default:

@@ -227,25 +227,27 @@ class AlertManager {
   checkEitherDirection(alert, currentPrice) {
     const { target_value, symbol, id } = alert;
     const cached = this.priceCache.get(symbol);
-    
+
     // If no previous price data, don't trigger yet
     if (!cached || cached.previousPrice === undefined) {
       return false;
     }
 
     const previousPrice = cached.previousPrice;
-    
+
     // Check if we've crossed the target value in either direction
     const previousAboveTarget = previousPrice >= target_value;
     const currentAboveTarget = currentPrice >= target_value;
-    
+
     // Alert triggers when we cross the target value from either side
     const hasCrossed = previousAboveTarget !== currentAboveTarget;
-    
+
     if (hasCrossed) {
-      logger.debug(`Either direction alert ${id}: crossed target ${target_value} (${previousPrice} -> ${currentPrice})`);
+      logger.debug(
+        `Either direction alert ${id}: crossed target ${target_value} (${previousPrice} -> ${currentPrice})`
+      );
     }
-    
+
     return hasCrossed;
   }
 
