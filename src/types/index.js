@@ -8,7 +8,7 @@
  * @property {string} symbol - Asset symbol (e.g., "BTC")
  * @property {string} alert_type - Custom alert type
  * @property {number} target_value - Price threshold
- * @property {'above'|'below'} direction - Alert direction
+ * @property {'above'|'below'|'either'} direction - Alert direction
  * @property {boolean} enabled - Whether alert is active
  * @property {Date|null} last_triggered_at - Last trigger timestamp
  * @property {string|null} notes - User notes

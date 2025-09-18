@@ -60,7 +60,20 @@ class DiscordService {
     } = notification;
 
     // Determine color based on direction
-    const color = direction === "above" ? 0x00ff00 : 0xff0000; // Green for above, red for below
+    let color;
+    switch (direction) {
+      case "above":
+        color = 0x00ff00; // Green
+        break;
+      case "below":
+        color = 0xff0000; // Red
+        break;
+      case "either":
+        color = 0xffa500; // Orange
+        break;
+      default:
+        color = 0x808080; // Gray
+    }
 
     // Format price change
     let priceChangeText = "";
@@ -73,14 +86,31 @@ class DiscordService {
       }%)`;
     }
 
-    // Create title
-    const directionEmoji = direction === "above" ? "⬆️" : "⬇️";
-    const title = `${directionEmoji} Price Alert: ${symbol}`;
-
-    // Create description
-    const description = `**${symbol}** has ${
-      direction === "above" ? "risen above" : "fallen below"
-    } your target price!`;
+    // Create title and description based on direction
+    let directionEmoji, title, description;
+    
+    switch (direction) {
+      case "above":
+        directionEmoji = "⬆️";
+        title = `${directionEmoji} Price Alert: ${symbol}`;
+        description = `**${symbol}** has risen above your target price!`;
+        break;
+      case "below":
+        directionEmoji = "⬇️";
+        title = `${directionEmoji} Price Alert: ${symbol}`;
+        description = `**${symbol}** has fallen below your target price!`;
+        break;
+      case "either":
+        directionEmoji = "🔄";
+        title = `${directionEmoji} Price Alert: ${symbol}`;
+        const crossedDirection = currentPrice >= targetPrice ? "above" : "below";
+        description = `**${symbol}** has crossed your target price (now ${crossedDirection} target)!`;
+        break;
+      default:
+        directionEmoji = "🔔";
+        title = `${directionEmoji} Price Alert: ${symbol}`;
+        description = `**${symbol}** price alert triggered!`;
+    }
 
     // Create fields
     const fields = [

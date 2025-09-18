@@ -121,9 +121,14 @@ class AlertManager {
    */
   async handlePriceUpdate(symbol, price, timestamp, volume) {
     try {
-      // Update price cache
+      // Get previous price for comparison
+      const previousData = this.priceCache.get(symbol);
+      const previousPrice = previousData?.price;
+
+      // Update price cache with previous price for "either" direction alerts
       this.priceCache.set(symbol, {
         price,
+        previousPrice,
         timestamp,
         volume,
         updatedAt: new Date(),
@@ -203,10 +208,45 @@ class AlertManager {
         return currentPrice >= target_value;
       case "below":
         return currentPrice <= target_value;
+      case "either":
+        // For "either" direction, we need to track if we've crossed the target
+        // This requires checking if we've moved from one side to the other
+        return this.checkEitherDirection(alert, currentPrice);
       default:
         logger.warn(`Unknown alert direction: ${direction}`);
         return false;
     }
+  }
+
+  /**
+   * Check if an "either" direction alert should trigger
+   * @param {Object} alert - Alert configuration
+   * @param {number} currentPrice - Current price
+   * @returns {boolean} Whether alert should trigger
+   */
+  checkEitherDirection(alert, currentPrice) {
+    const { target_value, symbol, id } = alert;
+    const cached = this.priceCache.get(symbol);
+    
+    // If no previous price data, don't trigger yet
+    if (!cached || cached.previousPrice === undefined) {
+      return false;
+    }
+
+    const previousPrice = cached.previousPrice;
+    
+    // Check if we've crossed the target value in either direction
+    const previousAboveTarget = previousPrice >= target_value;
+    const currentAboveTarget = currentPrice >= target_value;
+    
+    // Alert triggers when we cross the target value from either side
+    const hasCrossed = previousAboveTarget !== currentAboveTarget;
+    
+    if (hasCrossed) {
+      logger.debug(`Either direction alert ${id}: crossed target ${target_value} (${previousPrice} -> ${currentPrice})`);
+    }
+    
+    return hasCrossed;
   }
 
   /**

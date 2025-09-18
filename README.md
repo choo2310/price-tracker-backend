@@ -148,6 +148,14 @@ curl -X POST http://localhost:3000/api/alerts \\
   }'
 ```
 
+### Direction Options
+
+The `direction` field supports three values:
+
+- **`"above"`** - Alert triggers when price rises above the target value
+- **`"below"`** - Alert triggers when price falls below the target value  
+- **`"either"`** - Alert triggers when price crosses the target value in either direction (crossing from above to below or below to above)
+
 ### Get System Status
 
 ```bash
