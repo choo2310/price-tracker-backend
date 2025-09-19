@@ -19,6 +19,7 @@ const {
 const SupabaseService = require("./services/supabase");
 const FinnhubWebSocketService = require("./services/finnhub");
 const DiscordService = require("./services/discord");
+const TeamsService = require("./services/teams");
 const AlertManager = require("./services/alertManager");
 
 // Import routes
@@ -73,6 +74,24 @@ class PriceTrackerApp {
         );
       }
 
+      // Initialize Teams service (optional)
+      if (config.teams.webhookUrl) {
+        logger.info("Initializing Teams service...");
+        this.services.teams = new TeamsService(config.teams.webhookUrl);
+
+        // Test Teams webhook
+        const teamsHealthy = await this.services.teams.testWebhook();
+        if (!teamsHealthy) {
+          logger.warn(
+            "Teams webhook test failed - Teams notifications may not work"
+          );
+        } else {
+          logger.info("Teams service initialized successfully");
+        }
+      } else {
+        logger.info("Teams service not configured - TEAMS_WEBHOOK_URL not set");
+      }
+
       // Initialize Finnhub WebSocket service
       logger.info("Connecting to Finnhub WebSocket...");
       this.services.finnhub = new FinnhubWebSocketService(
@@ -85,7 +104,8 @@ class PriceTrackerApp {
       this.services.alertManager = new AlertManager(
         this.services.supabase,
         this.services.finnhub,
-        this.services.discord
+        this.services.discord,
+        this.services.teams // Optional Teams service
       );
       await this.services.alertManager.start();
 

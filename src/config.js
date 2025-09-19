@@ -36,6 +36,12 @@ const config = {
     required: true,
   },
 
+  // Microsoft Teams webhook configuration
+  teams: {
+    webhookUrl: process.env.TEAMS_WEBHOOK_URL,
+    required: false, // Optional service
+  },
+
   // Webhook configuration
   webhooks: {
     supabaseSecret: process.env.SUPABASE_WEBHOOK_SECRET,

@@ -80,9 +80,9 @@ function createAlertsRouter(supabaseService, alertManager) {
       }
 
       // Validate direction
-      if (!["above", "below"].includes(direction)) {
+      if (!["above", "below", "either"].includes(direction)) {
         return res.status(400).json({
-          error: 'direction must be either "above" or "below"',
+          error: 'direction must be "above", "below", or "either"',
         });
       }
 

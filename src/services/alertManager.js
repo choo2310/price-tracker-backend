@@ -1,10 +1,16 @@
 const logger = require("../utils/logger");
 
 class AlertManager {
-  constructor(supabaseService, finnhubService, discordService) {
+  constructor(
+    supabaseService,
+    finnhubService,
+    discordService,
+    teamsService = null
+  ) {
     this.supabaseService = supabaseService;
     this.finnhubService = finnhubService;
     this.discordService = discordService;
+    this.teamsService = teamsService;
     this.activeAlerts = new Map(); // symbol -> array of alerts
     this.priceCache = new Map(); // symbol -> latest price
     this.isRunning = false;
@@ -252,7 +258,7 @@ class AlertManager {
   }
 
   /**
-   * Send alert notification via Discord
+   * Send alert notification via Discord and Teams
    * @param {Object} alert - Alert that was triggered
    * @param {number} currentPrice - Current price
    * @param {number} timestamp - Price timestamp
@@ -287,9 +293,34 @@ class AlertManager {
         userId: user_id,
       };
 
-      await this.discordService.sendAlert(notification);
+      // Send notifications to all configured services
+      const notificationPromises = [];
 
-      logger.info(`Alert notification sent for ${symbol}`);
+      // Always send to Discord (required service)
+      notificationPromises.push(
+        this.discordService.sendAlert(notification).catch((error) => {
+          logger.error(`Failed to send Discord alert for ${symbol}:`, error);
+        })
+      );
+
+      // Send to Teams if service is available
+      if (this.teamsService) {
+        notificationPromises.push(
+          this.teamsService.sendAlert(notification).catch((error) => {
+            logger.error(`Failed to send Teams alert for ${symbol}:`, error);
+          })
+        );
+      }
+
+      // Wait for all notifications to complete
+      await Promise.allSettled(notificationPromises);
+
+      logger.info(`Alert notification sent for ${symbol}`, {
+        services: {
+          discord: true,
+          teams: !!this.teamsService,
+        },
+      });
     } catch (error) {
       logger.error(`Failed to send alert notification:`, error);
     }
