@@ -12,6 +12,13 @@ class FinnhubWebSocketService {
     this.isConnected = false;
     this.priceCallbacks = new Map(); // symbol -> callback function
 
+    // Message tracking for monitoring
+    this.messageCount = 0;
+    this.lastMessageTime = null;
+    this.recentMessages = [];
+    this.maxRecentMessages = 50;
+    this.messageListeners = new Set();
+
     if (!this.apiKey) {
       throw new Error("Finnhub API key is required");
     }
@@ -79,6 +86,35 @@ class FinnhubWebSocketService {
    * @param {Object} message - WebSocket message
    */
   handleMessage(message) {
+    // Track message for monitoring
+    this.messageCount++;
+    this.lastMessageTime = new Date();
+
+    // Store recent messages for debugging
+    const messageLog = {
+      type: message.type,
+      timestamp: this.lastMessageTime.toISOString(),
+      dataCount: Array.isArray(message.data)
+        ? message.data.length
+        : message.data
+        ? 1
+        : 0,
+    };
+
+    this.recentMessages.push(messageLog);
+    if (this.recentMessages.length > this.maxRecentMessages) {
+      this.recentMessages.shift();
+    }
+
+    // Notify message listeners
+    this.messageListeners.forEach((listener) => {
+      try {
+        listener(messageLog);
+      } catch (error) {
+        logger.error("Error in message listener:", error);
+      }
+    });
+
     if (
       message.type === "trade" &&
       message.data &&
@@ -254,6 +290,54 @@ class FinnhubWebSocketService {
    */
   getSubscribedSymbols() {
     return Array.from(this.subscribedSymbols);
+  }
+
+  /**
+   * Get recent messages for monitoring
+   * @returns {Array} Array of recent message logs
+   */
+  getRecentMessages() {
+    return [...this.recentMessages];
+  }
+
+  /**
+   * Add a message listener for monitoring
+   * @param {Function} listener - Callback function for messages
+   */
+  addMessageListener(listener) {
+    this.messageListeners.add(listener);
+  }
+
+  /**
+   * Remove a message listener
+   * @param {Function} listener - Callback function to remove
+   */
+  removeMessageListener(listener) {
+    this.messageListeners.delete(listener);
+  }
+
+  /**
+   * Get WebSocket statistics
+   * @returns {Object} Statistics object
+   */
+  getStatistics() {
+    return {
+      messageCount: this.messageCount,
+      lastMessageTime: this.lastMessageTime,
+      reconnectAttempts: this.reconnectAttempts,
+      subscribedSymbolsCount: this.subscribedSymbols.size,
+      isConnected: this.isConnected,
+      recentMessagesCount: this.recentMessages.length,
+    };
+  }
+
+  /**
+   * Reset statistics
+   */
+  resetStatistics() {
+    this.messageCount = 0;
+    this.lastMessageTime = null;
+    this.recentMessages = [];
   }
 }
 

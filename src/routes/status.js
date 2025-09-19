@@ -227,6 +227,111 @@ function createStatusRouter(alertManager, finnhubService, discordService) {
     }
   });
 
+  /**
+   * GET /status/websocket
+   * Get WebSocket connection details and recent messages
+   */
+  router.get("/websocket", (req, res) => {
+    try {
+      if (!finnhubService) {
+        return res.status(503).json({
+          error: "Finnhub service not available",
+        });
+      }
+
+      const wsStatus = {
+        connected: finnhubService.getConnectionStatus(),
+        subscribedSymbols: finnhubService.getSubscribedSymbols(),
+        reconnectAttempts: finnhubService.reconnectAttempts || 0,
+        lastMessageTime: finnhubService.lastMessageTime || null,
+        messageCount: finnhubService.messageCount || 0,
+        recentMessages: finnhubService.getRecentMessages
+          ? finnhubService.getRecentMessages()
+          : [],
+      };
+
+      res.json({
+        success: true,
+        data: wsStatus,
+      });
+    } catch (error) {
+      logger.error("Error getting WebSocket status:", error);
+      res.status(500).json({
+        error: "Failed to get WebSocket status",
+        message: error.message,
+      });
+    }
+  });
+
+  /**
+   * GET /status/websocket/stream
+   * Server-Sent Events endpoint for real-time WebSocket monitoring
+   */
+  router.get("/websocket/stream", (req, res) => {
+    // Set headers for Server-Sent Events
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Cache-Control",
+    });
+
+    // Send initial connection message
+    res.write(
+      `data: ${JSON.stringify({
+        type: "connection",
+        message: "Connected to WebSocket monitoring stream",
+        timestamp: new Date().toISOString(),
+      })}\n\n`
+    );
+
+    // Set up WebSocket message listener if available
+    let messageListener;
+    if (
+      finnhubService &&
+      typeof finnhubService.addMessageListener === "function"
+    ) {
+      messageListener = (data) => {
+        res.write(
+          `data: ${JSON.stringify({
+            type: "message",
+            data: data,
+            timestamp: new Date().toISOString(),
+          })}\n\n`
+        );
+      };
+
+      finnhubService.addMessageListener(messageListener);
+    }
+
+    // Send periodic status updates
+    const statusInterval = setInterval(() => {
+      if (finnhubService) {
+        const status = {
+          type: "status",
+          connected: finnhubService.getConnectionStatus(),
+          subscribedSymbols: finnhubService.getSubscribedSymbols(),
+          timestamp: new Date().toISOString(),
+        };
+        res.write(`data: ${JSON.stringify(status)}\n\n`);
+      }
+    }, 5000); // Every 5 seconds
+
+    // Clean up on client disconnect
+    req.on("close", () => {
+      clearInterval(statusInterval);
+      if (
+        messageListener &&
+        finnhubService &&
+        typeof finnhubService.removeMessageListener === "function"
+      ) {
+        finnhubService.removeMessageListener(messageListener);
+      }
+      logger.debug("WebSocket monitoring client disconnected");
+    });
+  });
+
   return router;
 }
 
