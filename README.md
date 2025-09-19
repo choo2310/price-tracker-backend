@@ -112,6 +112,7 @@ CREATE TYPE direction_enum AS ENUM ('above', 'below');
 - `DELETE /api/alerts/:id` - Delete alert
 - `GET /api/alerts/symbols` - Get user's tracked symbols
 - `POST /api/alerts/:id/test` - Test alert notification
+- `POST /api/alerts/webhook` - Supabase webhook for real-time sync
 
 ### System Status
 

@@ -35,6 +35,12 @@ const config = {
     required: true,
   },
 
+  // Webhook configuration
+  webhooks: {
+    supabaseSecret: process.env.SUPABASE_WEBHOOK_SECRET,
+    verifySignature: process.env.VERIFY_WEBHOOK_SIGNATURE !== "false",
+  },
+
   // Logging configuration
   logging: {
     level: process.env.LOG_LEVEL || "info",

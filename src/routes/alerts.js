@@ -1,5 +1,11 @@
 const express = require("express");
 const logger = require("../utils/logger");
+const {
+  webhookVerification,
+  captureRawBody,
+  webhookRateLimit,
+} = require("../utils/webhooks");
+const config = require("../config");
 
 function createAlertsRouter(supabaseService, alertManager) {
   const router = express.Router();
@@ -354,7 +360,117 @@ function createAlertsRouter(supabaseService, alertManager) {
     }
   });
 
+  /**
+   * POST /alerts/webhook
+   * Handle Supabase webhooks for alert changes
+   */
+  router.post(
+    "/webhook",
+    webhookRateLimit(50, 60000), // 50 requests per minute
+    captureRawBody,
+    webhookVerification(config.webhooks.supabaseSecret),
+    async (req, res) => {
+      try {
+        const { type, table, record, old_record } = req.body;
+
+        // Verify this is for the alerts table
+        if (table !== "alerts") {
+          return res.status(400).json({
+            error: "Webhook not for alerts table",
+          });
+        }
+
+        logger.info(`Received webhook: ${type} for alert`, {
+          type,
+          alertId: record?.id || old_record?.id,
+          symbol: record?.symbol || old_record?.symbol,
+        });
+
+        // Handle different webhook types
+        switch (type) {
+          case "INSERT":
+            await handleAlertInsert(record, alertManager);
+            break;
+          case "UPDATE":
+            await handleAlertUpdate(record, old_record, alertManager);
+            break;
+          case "DELETE":
+            await handleAlertDelete(old_record, alertManager);
+            break;
+          default:
+            logger.warn(`Unknown webhook type: ${type}`);
+        }
+
+        // Optionally refresh all alerts to ensure consistency
+        if (alertManager) {
+          await alertManager.refreshAlerts();
+          logger.info("Alert manager refreshed after webhook");
+        }
+
+        res.json({
+          success: true,
+          message: `Webhook ${type} processed successfully`,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        logger.error("Error processing webhook:", error);
+        res.status(500).json({
+          error: "Failed to process webhook",
+          message: error.message,
+        });
+      }
+    }
+  );
+
   return router;
+}
+
+/**
+ * Handle alert insert webhook
+ */
+async function handleAlertInsert(record, alertManager) {
+  if (!record || !alertManager) return;
+
+  logger.info(`New alert created: ${record.id} for ${record.symbol}`);
+
+  // Add the new alert to monitoring if it's enabled
+  if (record.enabled) {
+    alertManager.addAlert(record);
+    logger.info(`Added alert ${record.id} to monitoring`);
+  }
+}
+
+/**
+ * Handle alert update webhook
+ */
+async function handleAlertUpdate(record, oldRecord, alertManager) {
+  if (!record || !alertManager) return;
+
+  logger.info(`Alert updated: ${record.id} for ${record.symbol}`);
+
+  // Remove old alert from monitoring
+  if (oldRecord) {
+    alertManager.removeAlert(oldRecord.id);
+  }
+
+  // Add updated alert to monitoring if it's enabled
+  if (record.enabled) {
+    alertManager.addAlert(record);
+    logger.info(`Updated alert ${record.id} in monitoring`);
+  }
+}
+
+/**
+ * Handle alert delete webhook
+ */
+async function handleAlertDelete(oldRecord, alertManager) {
+  if (!oldRecord || !alertManager) return;
+
+  logger.info(`Alert deleted: ${oldRecord.id} for ${oldRecord.symbol}`);
+
+  // Remove alert from monitoring
+  alertManager.removeAlert(oldRecord.id);
+  logger.info(`Removed alert ${oldRecord.id} from monitoring`);
 }
 
 module.exports = createAlertsRouter;
