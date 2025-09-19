@@ -46,12 +46,31 @@ class PriceTrackerApp {
 
       // Initialize Discord service
       logger.info("Initializing Discord service...");
-      this.services.discord = new DiscordService(config.discord.webhookUrl);
+      this.services.discord = new DiscordService(
+        config.discord.webhookUrl,
+        config.discord.debugWebhookUrl
+      );
 
       // Test Discord webhook
       const discordHealthy = await this.services.discord.testWebhook();
       if (!discordHealthy) {
         logger.warn("Discord webhook test failed - notifications may not work");
+      }
+
+      // Configure Discord logging if debug webhook is available
+      if (config.discord.debugWebhookUrl) {
+        logger.info("Configuring Discord debug logging...");
+        logger.configureDiscordLogging(this.services.discord, "warn");
+
+        // Send a test message to verify Discord logging
+        logger.info("Discord logging configured successfully", {
+          debugWebhookConfigured: true,
+          testMessage: true,
+        });
+      } else {
+        logger.info(
+          "Discord debug logging not configured - DEBUG_DISCORD_WEBHOOK_URL not set"
+        );
       }
 
       // Initialize Finnhub WebSocket service

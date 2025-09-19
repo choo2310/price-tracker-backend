@@ -32,6 +32,7 @@ const config = {
   // Discord webhook configuration
   discord: {
     webhookUrl: process.env.DISCORD_WEBHOOK_URL,
+    debugWebhookUrl: process.env.DEBUG_DISCORD_WEBHOOK_URL,
     required: true,
   },
 

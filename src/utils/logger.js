@@ -242,4 +242,84 @@ logger.info("Logger initialized", {
   transports: transports.map((t) => t.constructor.name),
 });
 
+/**
+ * Configure Discord logging transport
+ * @param {DiscordService} discordService - Discord service instance with debug webhook
+ * @param {string} level - Minimum log level to send to Discord (default: 'warn')
+ */
+logger.configureDiscordLogging = (discordService, level = "warn") => {
+  try {
+    // Only add Discord transport if debug webhook is configured
+    if (!discordService.debugWebhookUrl) {
+      logger.info(
+        "Discord debug logging not configured - DEBUG_DISCORD_WEBHOOK_URL not set"
+      );
+      return;
+    }
+
+    const DiscordTransport = require("./discordTransport");
+
+    // Check if Discord transport already exists
+    const existingDiscordTransport = logger.transports.find(
+      (transport) => transport.name === "discord"
+    );
+
+    if (existingDiscordTransport) {
+      logger.info("Discord transport already configured");
+      return;
+    }
+
+    // Create and add Discord transport
+    const discordTransport = new DiscordTransport({
+      level: level,
+      discordService: discordService,
+      handleExceptions: true,
+      handleRejections: true,
+    });
+
+    logger.add(discordTransport);
+
+    logger.info("Discord logging transport configured", {
+      level: level,
+      debugWebhookConfigured: !!discordService.debugWebhookUrl,
+    });
+  } catch (error) {
+    logger.error("Failed to configure Discord logging transport:", error);
+  }
+};
+
+/**
+ * Remove Discord logging transport
+ */
+logger.removeDiscordLogging = () => {
+  try {
+    const discordTransport = logger.transports.find(
+      (transport) => transport.name === "discord"
+    );
+
+    if (discordTransport) {
+      logger.remove(discordTransport);
+      logger.info("Discord logging transport removed");
+    }
+  } catch (error) {
+    logger.error("Failed to remove Discord logging transport:", error);
+  }
+};
+
+/**
+ * Test Discord logging
+ * @param {string} level - Log level to test (default: 'info')
+ * @param {string} message - Test message (default: 'Discord logging test')
+ */
+logger.testDiscordLogging = (
+  level = "info",
+  message = "Discord logging test"
+) => {
+  logger.log(level, message, {
+    test: true,
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
+  });
+};
+
 module.exports = logger;

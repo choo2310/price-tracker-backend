@@ -1,9 +1,9 @@
 const axios = require("axios");
-const logger = require("../utils/logger");
 
 class DiscordService {
-  constructor(webhookUrl) {
+  constructor(webhookUrl, debugWebhookUrl = null) {
     this.webhookUrl = webhookUrl;
+    this.debugWebhookUrl = debugWebhookUrl;
 
     if (!this.webhookUrl) {
       throw new Error("Discord webhook URL is required");
@@ -11,6 +11,12 @@ class DiscordService {
 
     // Rate limiting: Discord allows 30 requests per minute per webhook
     this.rateLimit = {
+      requests: 0,
+      resetTime: Date.now() + 60000, // Reset every minute
+    };
+
+    // Separate rate limiting for debug webhook
+    this.debugRateLimit = {
       requests: 0,
       resetTime: Date.now() + 60000, // Reset every minute
     };
@@ -33,9 +39,10 @@ class DiscordService {
       };
 
       await this.sendWebhook(payload);
-      logger.info(`Discord alert sent for ${notification.symbol}`);
+      // Use console.log to avoid circular dependency with logger
+      console.log(`Discord alert sent for ${notification.symbol}`);
     } catch (error) {
-      logger.error("Failed to send Discord alert:", error);
+      console.error("Failed to send Discord alert:", error);
       throw error;
     }
   }
@@ -250,9 +257,9 @@ class DiscordService {
       };
 
       await this.sendAlert(testNotification);
-      logger.info("Test Discord alert sent successfully");
+      console.log("Test Discord alert sent successfully");
     } catch (error) {
-      logger.error("Failed to send test Discord alert:", error);
+      console.error("Failed to send test Discord alert:", error);
       throw error;
     }
   }
@@ -307,9 +314,9 @@ class DiscordService {
       };
 
       await this.sendWebhook(payload);
-      logger.info("Discord status notification sent");
+      console.log("Discord status notification sent");
     } catch (error) {
-      logger.error("Failed to send Discord status notification:", error);
+      console.error("Failed to send Discord status notification:", error);
       throw error;
     }
   }
@@ -361,9 +368,9 @@ class DiscordService {
       };
 
       await this.sendWebhook(payload);
-      logger.info("Discord error notification sent");
+      console.log("Discord error notification sent");
     } catch (notificationError) {
-      logger.error(
+      console.error(
         "Failed to send Discord error notification:",
         notificationError
       );
@@ -391,13 +398,13 @@ class DiscordService {
       }
     } catch (error) {
       if (error.response) {
-        logger.error(
+        console.error(
           `Discord webhook error: ${error.response.status} - ${error.response.data}`
         );
       } else if (error.request) {
-        logger.error("Discord webhook request failed - no response received");
+        console.error("Discord webhook request failed - no response received");
       } else {
-        logger.error(`Discord webhook error: ${error.message}`);
+        console.error(`Discord webhook error: ${error.message}`);
       }
       throw error;
     }
@@ -418,7 +425,7 @@ class DiscordService {
     // Check if we're at the rate limit
     if (this.rateLimit.requests >= 30) {
       const waitTime = this.rateLimit.resetTime - now;
-      logger.warn(
+      console.warn(
         `Rate limit reached. Waiting ${waitTime}ms before sending Discord message`
       );
       await new Promise((resolve) => setTimeout(resolve, waitTime));
@@ -434,6 +441,192 @@ class DiscordService {
    */
   updateRateLimit() {
     this.rateLimit.requests++;
+  }
+
+  /**
+   * Send log message to debug Discord webhook
+   * @param {string} level - Log level (error, warn, info, debug)
+   * @param {string} message - Log message
+   * @param {Object} metadata - Additional metadata
+   */
+  async sendLogMessage(level, message, metadata = {}) {
+    if (!this.debugWebhookUrl) {
+      return; // Debug webhook not configured, skip
+    }
+
+    try {
+      await this.checkDebugRateLimit();
+
+      const embed = this.createLogEmbed(level, message, metadata);
+      const payload = {
+        embeds: [embed],
+        username: "Debug Logger Bot",
+        avatar_url:
+          "https://cdn.discordapp.com/attachments/placeholder/debug-bot-avatar.png",
+      };
+
+      await this.sendDebugWebhook(payload);
+      this.updateDebugRateLimit();
+    } catch (error) {
+      // Avoid infinite recursion by not using logger here
+      console.error("Failed to send Discord log message:", error.message);
+    }
+  }
+
+  /**
+   * Create Discord embed for log message
+   * @param {string} level - Log level
+   * @param {string} message - Log message
+   * @param {Object} metadata - Additional metadata
+   * @returns {Object} Discord embed object
+   */
+  createLogEmbed(level, message, metadata) {
+    // Determine color and emoji based on log level
+    let color, emoji, title;
+    switch (level.toLowerCase()) {
+      case "error":
+        color = 0xff0000; // Red
+        emoji = "🚨";
+        title = "Error";
+        break;
+      case "warn":
+        color = 0xffa500; // Orange
+        emoji = "⚠️";
+        title = "Warning";
+        break;
+      case "info":
+        color = 0x0099ff; // Blue
+        emoji = "ℹ️";
+        title = "Info";
+        break;
+      case "debug":
+        color = 0x808080; // Gray
+        emoji = "🐛";
+        title = "Debug";
+        break;
+      case "http":
+        color = 0x00ff00; // Green
+        emoji = "🌐";
+        title = "HTTP";
+        break;
+      default:
+        color = 0x808080; // Gray
+        emoji = "📝";
+        title = "Log";
+    }
+
+    const fields = [
+      {
+        name: "📝 Message",
+        value:
+          message.length > 1000 ? message.substring(0, 1000) + "..." : message,
+        inline: false,
+      },
+    ];
+
+    // Add metadata if present
+    if (metadata && Object.keys(metadata).length > 0) {
+      const metadataString = JSON.stringify(metadata, null, 2);
+      fields.push({
+        name: "📊 Metadata",
+        value:
+          metadataString.length > 1000
+            ? metadataString.substring(0, 1000) + "..."
+            : "```json\n" + metadataString + "\n```",
+        inline: false,
+      });
+    }
+
+    // Add stack trace if present in metadata
+    if (metadata.stack) {
+      const stackTrace = metadata.stack.toString();
+      fields.push({
+        name: "📋 Stack Trace",
+        value:
+          stackTrace.length > 1000
+            ? "```\n" + stackTrace.substring(0, 1000) + "...\n```"
+            : "```\n" + stackTrace + "\n```",
+        inline: false,
+      });
+    }
+
+    return {
+      title: `${emoji} ${title}`,
+      description: `**Level:** ${level.toUpperCase()}`,
+      color,
+      fields,
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: "Price Tracker Debug Logger",
+        icon_url:
+          "https://cdn.discordapp.com/attachments/placeholder/debug-footer-icon.png",
+      },
+    };
+  }
+
+  /**
+   * Send webhook to debug URL
+   * @param {Object} payload - Discord webhook payload
+   */
+  async sendDebugWebhook(payload) {
+    try {
+      const response = await axios.post(this.debugWebhookUrl, payload, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      });
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      if (error.response) {
+        console.error(
+          `Discord debug webhook error: ${error.response.status} - ${error.response.statusText}`
+        );
+        if (error.response.data) {
+          console.error("Discord debug webhook response:", error.response.data);
+        }
+      } else if (error.request) {
+        console.error(
+          "Discord debug webhook request error: No response received"
+        );
+      } else {
+        console.error(`Discord debug webhook error: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check rate limit for debug webhook before sending
+   */
+  async checkDebugRateLimit() {
+    const now = Date.now();
+
+    // Reset rate limit counter if a minute has passed
+    if (now >= this.debugRateLimit.resetTime) {
+      this.debugRateLimit.requests = 0;
+      this.debugRateLimit.resetTime = now + 60000;
+    }
+
+    // Check if we're at the rate limit (use lower limit for debug to avoid spam)
+    if (this.debugRateLimit.requests >= 20) {
+      const waitTime = this.debugRateLimit.resetTime - now;
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+
+      // Reset after waiting
+      this.debugRateLimit.requests = 0;
+      this.debugRateLimit.resetTime = Date.now() + 60000;
+    }
+  }
+
+  /**
+   * Update debug rate limit counter
+   */
+  updateDebugRateLimit() {
+    this.debugRateLimit.requests++;
   }
 
   /**
@@ -459,7 +652,7 @@ class DiscordService {
       await this.sendWebhook(testPayload);
       return true;
     } catch (error) {
-      logger.error("Discord webhook test failed:", error);
+      console.error("Discord webhook test failed:", error);
       return false;
     }
   }
